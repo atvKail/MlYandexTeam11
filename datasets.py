@@ -1,5 +1,7 @@
 from torch.utils.data import Dataset
+from torchvision import transforms
 from PIL import Image
+import random as rnd
 import pandas as pd
 import numpy as np
 import pickle
@@ -60,7 +62,9 @@ class CustomDataset(Dataset):
                 pickle.dump(self.data, f)
 
     def __len__(self):
-        return len(self.data)
+        if self.save_file:
+            return len(self.data)
+        return len(self.data_frame)
 
     def __getitem__(self, idx):
         if self.save_file:
@@ -79,6 +83,29 @@ class CustomDataset(Dataset):
             image = self.transform(image)
 
         return image, target
+
+    def get_balance_data(self, augmentation_transform=transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(degrees=45)
+    ])):
+        class_count = {}
+        balance_data = []
+
+        for i in range(len(self)):
+            if self[i][1] not in class_count.keys():
+                class_count[self[i][1]] = [1, [i]]
+            else:
+                class_count[self[i][1]] = [class_count[self[i][1]][0] + 1, class_count[self[i][1]][1] + [i]]
+                balance_data.append(self[i])
+
+        mx_count = max(class_count.items(), key=lambda x:x[1][0])
+
+        for item in class_count.items():
+            for _ in range(mx_count[1][0] - item[1][0]):
+                x = rnd.choice(item[1][1])
+                image = self[x][0]
+                balance_data.append((augmentation_transform(image), self[x][1]))
+        return balance_data
 
 
 
