@@ -5,6 +5,7 @@ import random as rnd
 import pandas as pd
 import numpy as np
 import pickle
+import torch
 import cv2
 import os
 
@@ -69,7 +70,7 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         if self.save_file:
             return self.data[idx]
-        
+
         img_name = os.path.join(self.root_dir, f"img_{self.data_frame.iloc[idx, 0]}.png")
         image = Image.open(img_name)
         target = self.data_frame.iloc[idx, 1]
@@ -108,16 +109,32 @@ class CustomDataset(Dataset):
         return balance_data
 
 
+class TestDataClassifer:
+    def __init__(self, model, image_folder, transform=None):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = model
+        self.model.eval()
+        self.image_folder = image_folder
+        self.transform = transform
 
-# Пример использования
-# # Путь к файлам
-# csv_file = os.getcwd() + '\\data\\train_answers.csv'
-# root_dir = os.getcwd() + '\\data\\train_images'
+    def load_images_and_predict(self):
+        predictions = []
+        image_paths = sorted([os.path.join(self.image_folder, file) for file in os.listdir(self.image_folder) if file.endswith(('png', 'jpg', 'jpeg'))])
 
-# # Преобразования изображений
-# transform = transforms.Compose([
-#     transforms.ToTensor()
-# ])
+        for image_path in image_paths:
+            image = Image.open(image_path).convert('RGB')
 
-# # Создание датасета
-# dataset = CustomDataset(csv_file=csv_file, root_dir=root_dir, transform=transform)
+            image = self.transform(image)
+            image = image.unsqueeze(0).to(self.device)
+
+            with torch.no_grad():
+                output = self.model(image)
+                _, predicted = torch.max(output, 1)
+                predictions.append(predicted.item())
+
+        return predictions
+
+    def save_predictions_to_csv(self, predictions):
+        data = {"ID": list(range(len(predictions))), "target_feature": predictions}
+        df = pd.DataFrame(data)
+        df.to_csv("predictions.csv", index=False)
